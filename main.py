@@ -6,24 +6,38 @@ import os
 
 # ---------- パーサー ----------
 def parse_time(s):
+    """文字列を時刻に変換する。'9' → 09:00, '15:00' → 15:00"""
+    s = s.strip()
+    if not s:
+        return None
+    # "9" や "15" → 時だけ
+    if s.isdigit():
+        hour = int(s)
+        if 0 <= hour < 24:
+            return datetime.time(hour, 0)
+    # "09:00" 形式
     try:
         return datetime.datetime.strptime(s, "%H:%M").time()
     except:
-        return None
-
+        pass
+    # "9" が頭にあるパターン（例: 9L20R15 → 09:00）
+    if s[0].isdigit():
+        hour = int(s.split(":")[0]) if ":" in s else int(s[:2] if len(s) >= 2 and s[:2].isdigit() else s[0])
+        if 0 <= hour < 24:
+            return datetime.time(hour, 0)
+    return None
+    
 def parse_events(cell, kind):
     if pd.isna(cell):
         return []
     events = []
     for token in str(cell).split():
         if kind == "直母":
-            if "○" in token:  # ○だけ
-                t = parse_time(token.replace("○", ""))
-                if t: events.append((t, None))
-            elif "L" in token and "R" in token:  # LxxRyy
-                tstr = token[:5]
-                t = parse_time(tstr)
-                rest = token[5:]
+            # "9L15R20" → 09:00, L15R20
+            if "L" in token and "R" in token:
+                hour_part = ''.join(ch for ch in token if ch.isdigit())[:2]  # 先頭の数字だけ抽出
+                t = parse_time(hour_part)
+                rest = token[len(hour_part):]
                 mins = 0
                 if "L" in rest:
                     try:
@@ -36,11 +50,16 @@ def parse_events(cell, kind):
                     except:
                         pass
                 if t: events.append((t, mins))
-        elif kind in ["搾乳", "ミルク"]:
+            elif "○" in token:
+                hour_part = token.replace("○","")
+                t = parse_time(hour_part)
+                if t: events.append((t, None))
+        elif kind in ["搾乳","ミルク"]:
             try:
+                # "9-60" → 09:00-60ml
                 tstr, amt = token.split("-")
-                amt = "".join(ch for ch in amt if ch.isdigit())
                 t = parse_time(tstr)
+                amt = "".join(ch for ch in amt if ch.isdigit())
                 if t: events.append((t, int(amt)))
             except:
                 pass
@@ -48,8 +67,8 @@ def parse_events(cell, kind):
             t = parse_time(token)
             if t: events.append((t, None))
         elif kind == "便":
-            t = parse_time(token[:5])
-            if t: events.append((t, token[5:] if len(token) > 5 else "○"))
+            t = parse_time(token.rstrip("○×△"))
+            if t: events.append((t, token[-1] if token[-1] in "○×△" else "○"))
     return events
 
 # ---------- メイン処理 ----------
