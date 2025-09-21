@@ -1,100 +1,160 @@
+import os
+import argparse
+import datetime
+import re
 import pandas as pd
 import matplotlib.pyplot as plt
-import datetime
-import argparse
-import os
+import japanize_matplotlib
 
-# ---------- パーサー ----------
+def load_data(filename: str | None = None):
+    if filename is None:
+        print("入力ファイルなし、デフォルトデータで例示")
+        data = {
+            "date": ["2025-09-15", "2025-09-16"],
+            "breast": ["08:00L15R20 11:30○", "07:30L20R15"],
+            "pumped": ["09:00-60 14:00-40", "10:00-50"],
+            "formula": ["12:30-100a 18:30-80", "13:00-120"],
+            "urine": ["07:00 10:00 15:30", "08:00 12:00"],
+            "stool": ["09:00 13:00△", "09:30× 16:00"]
+        }
+        df = pd.DataFrame(data)
+    else:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(filename)
+        elif filename.endswith(".xlsx"):
+            df = pd.read_excel(filename)
+        else:
+            raise ValueError("対応しているのはCSVかExcelファイルのみです")
+            
+        if "date" not in df.columns:
+            raise ValueError("CSVには 'date' 列が必要です")
+        
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    return df
+    
 def parse_time(s):
-    """文字列を時刻に変換する。'9' → 09:00, '15:00' → 15:00"""
     s = s.strip()
     if not s:
         return None
-    # "9" や "15" → 時だけ
+    # "9" など時だけの簡略表記のとき、15:30とみなす
     if s.isdigit():
         hour = int(s)
         if 0 <= hour < 24:
-            return datetime.time(hour, 0)
+            return datetime.time(hour, 30)
     # "09:00" 形式
     try:
         return datetime.datetime.strptime(s, "%H:%M").time()
     except:
         pass
-    # "9" が頭にあるパターン（例: 9L20R15 → 09:00）
-    if s[0].isdigit():
-        hour = int(s.split(":")[0]) if ":" in s else int(s[:2] if len(s) >= 2 and s[:2].isdigit() else s[0])
-        if 0 <= hour < 24:
-            return datetime.time(hour, 0)
     return None
     
-def parse_events(cell, kind):
-    if pd.isna(cell):
-        return []
-    events = []
-    for token in str(cell).split():
-        if kind == "直母":
-            # "9L15R20" → 09:00, L15R20
-            if "L" in token and "R" in token:
-                hour_part = ''.join(ch for ch in token if ch.isdigit())[:2]  # 先頭の数字だけ抽出
-                t = parse_time(hour_part)
-                rest = token[len(hour_part):]
-                mins = 0
-                if "L" in rest:
-                    try:
-                        mins += int(rest.split("R")[0][1:])
-                    except:
-                        pass
-                if "R" in rest:
-                    try:
-                        mins += int(rest.split("R")[1])
-                    except:
-                        pass
-                if t: events.append((t, mins))
-            elif "○" in token:
-                hour_part = token.replace("○","")
-                t = parse_time(hour_part)
-                if t: events.append((t, None))
-        elif kind in ["搾乳","ミルク"]:
-            try:
-                # "9-60" → 09:00-60ml
-                tstr, amt = token.split("-")
-                t = parse_time(tstr)
-                amt = "".join(ch for ch in amt if ch.isdigit())
-                if t: events.append((t, int(amt)))
-            except:
-                pass
-        elif kind == "尿":
-            t = parse_time(token)
-            if t: events.append((t, None))
-        elif kind == "便":
-            t = parse_time(token.rstrip("○×△"))
-            if t: events.append((t, token[-1] if token[-1] in "○×△" else "○"))
-    return events
+def parse_breast_entry(s: str):
+    """
+    直接母乳の授乳時刻と左右の授乳時間(分)をパースする
+    例:
+    '8:20L10R10' -> breast_time = 08:20:00, breast_length = 20
+    '9' -> breast_time = 09:00:00, breast_length = None
+    """
+    s = s.strip()
+    m = re.match(r'(\d{1,2}:?\d{0,2})([LR]\d{1,2})?([LR]\d{1,2})?', s)
+    if m is not None:
+        breast_time = parse_time(m.group(1))
+        if m.group(3) is not None:
+            breast_length = int(m.group(2)[1:]) + int(m.group(3)[1:])
+        elif m.group(2) is not None:
+            breast_length = int(m.group(2)[1:])
+        else:
+            breast_length = None
+    return breast_time, breast_length
 
 # ---------- メイン処理 ----------
 def main():
     parser = argparse.ArgumentParser(description="授乳・おむつ記録の可視化")
-    parser.add_argument("--file", help="入力CSVファイル（省略可）")
+    parser.add_argument("-f", "--file", help="入力ファイル, CSV or Excel (xlsx)")
     args = parser.parse_args()
 
     if args.file and os.path.exists(args.file):
-        df = pd.read_csv(args.file)
-        if "date" not in df.columns:
-            raise ValueError("CSVには 'date' 列が必要です")
-        df["date"] = pd.to_datetime(df["date"]).dt.date
+        df = load_data(args.file)
     else:
-        # デフォルトデータ
-        data = {
-            "date": ["2025-09-15", "2025-09-16"],
-            "直母": ["08:00L15R20 11:30○", "07:30L20R15"],
-            "搾乳": ["09:00-60 14:00-40", "10:00-50"],
-            "ミルク": ["12:30-100a 18:30-80", "13:00-120"],
-            "尿": ["07:00 10:00 15:30", "08:00 12:00"],
-            "便": ["09:00 13:00△", "09:30× 16:00"]
-        }
-        df = pd.DataFrame(data)
-        df["date"] = pd.to_datetime(df["date"]).dt.date
+        df = load_data()  # サンプルデータ呼出
+        
+    breast_records = []
+    pumped_records = []
+    formula_records = []
+    urine_records = []
+    stool_records = []
+    
+    for row in df.itertuples():
+        if pd.notna(row.breast):
+            tokens = str(row.breast).split()
+            for token in tokens:
+                time, length = parse_breast_entry(token)
+                if time:
+                    rec = {"date": row.date, "time": time, "length": length}
+                    breast_records.append(rec)
+                    print(rec)
+            
+        if pd.notna(row.pumped):
+            tokens = str(row.pumped).split()
+            for token in tokens:
+                m = re.match(r'(\d{1,2}:?\d{0,2})-(\d{1,3})', token.strip())
+                if m:
+                    time = parse_time(m.group(1))
+                    amount = int(m.group(2))
+                    if time:
+                        rec = {"date": row.date, "time": time, "amount": amount}
+                        pumped_records.append(rec)
+                        print(rec)
 
+        if pd.notna(row.formula):
+            tokens = str(row.formula).split()
+            for token in tokens:
+                m = re.match(r'(\d{1,2}:?\d{0,2})-(\d{1,3})', token.strip())
+                if m:
+                    time = parse_time(m.group(1))
+                    amount = int(m.group(2))
+                    if time:
+                        rec = {"date": row.date, "time": time, "amount": amount}
+                        formula_records.append(rec)
+                        print(rec)
+
+        if pd.notna(row.urine):
+            tokens = str(row.urine).split()
+            for token in tokens:
+                time = parse_time(token)
+                if time:
+                    rec = {"date": row.date, "time": time}
+                    urine_records.append(rec)
+                    print(rec)
+
+        if pd.notna(row.stool):
+            tokens = str(row.stool).split()
+            for token in tokens:
+                time = parse_time(token)
+                if time:
+                    rec = {"date": row.date, "time": time}
+                    stool_records.append(rec)
+                    print(rec)
+
+    # DEBUG: 各記録のDataFrameを作成
+    breast_df = pd.DataFrame(breast_records)
+    pumped_df = pd.DataFrame(pumped_records)
+    formula_df = pd.DataFrame(formula_records)
+    urine_df = pd.DataFrame(urine_records)
+    stool_df = pd.DataFrame(stool_records)
+    print("=== 直接母乳 ===")
+    print(breast_df)
+    print("=== 搾乳 ===")
+    print(pumped_df)
+    print("=== ミルク ===")
+    print(formula_df)
+    print("=== 尿 ===")
+    print(urine_df)
+    print("=== 便 ===")
+    print(stool_df)
+
+    
+"""
     # ---------- 可視化 ----------
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10,12))
     colors = {"直母":"tab:blue","搾乳":"tab:green","ミルク":"tab:orange","尿":"tab:purple","便":"tab:brown"}
@@ -145,6 +205,7 @@ def main():
 
     plt.tight_layout()
     plt.show()
+"""
 
 if __name__ == "__main__":
     main()
