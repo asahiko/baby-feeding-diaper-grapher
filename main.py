@@ -4,6 +4,7 @@ import datetime
 import re
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import japanize_matplotlib
 
 def parse_args():
@@ -93,14 +94,17 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df):
             time = row['time']
             if pd.notna(time):
                 hour = time.hour + time.minute / 60
-                ax1.eventplot([hour], lineoffsets=date_idx, colors=colors[kind], linelengths=0.8)
+                ax1.eventplot([hour], lineoffsets=date_idx, colors=colors[kind], linelengths=0.8, orientation='vertical')
     
-    ax1.set_yticks(range(len(all_dates)))
-    ax1.set_yticklabels(all_dates)
-    ax1.set_xlim(0, 24)
-    ax1.set_xlabel("Hour of day")
-    ax1.set_ylabel("Date")
+    ax1.set_xticks(range(len(all_dates)))
+    ax1.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
+    ax1.set_yticks([0, 6, 12, 18, 24])
+    ax1.set_yticks(range(0, 24), minor=True)
+    ax1.set_ylim(0, 24)
+    ax1.set_ylabel("Hour of day")
+    ax1.set_xlabel("Date")
     ax1.set_title("授乳・おむつイベント")
+    ax1.invert_yaxis()
 
     # 日ごとの集計
     feeding_totals = []
@@ -117,6 +121,8 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df):
     feeding_df.set_index("date").plot(
         kind="bar", stacked=True, ax=ax2, color=[colors["搾乳"], colors["ミルク"]]
     )
+    ax2.set_xticks(range(len(all_dates)))
+    ax2.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
     ax2.set_ylabel("授乳量 (ml)")
     ax2.set_title("1日ごとの授乳量（搾乳・ミルク）")
     ax2.legend(title="授乳方法")
@@ -126,6 +132,8 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df):
     direct_df.set_index("date").plot(
         kind="bar", ax=ax3, color=colors["直母"]
     )
+    ax3.set_xticks(range(len(all_dates)))
+    ax3.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
     ax3.set_ylabel("授乳時間 (分)")
     ax3.set_title("1日ごとの直母授乳時間")
     ax3.legend(title="授乳方法")
