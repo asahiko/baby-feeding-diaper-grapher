@@ -72,7 +72,23 @@ def parse_breast_entry(s: str):
             breast_length = int(m.group(2)[1:])
         else:
             breast_length = None
-    return breast_time, breast_length
+        return breast_time, breast_length
+    return None, None
+
+def parse_diaper_entry(s: str):
+    """
+    おむつ交換の時刻と備考をパースする
+    例:
+    '09:00△' -> diaper_time = 09:00:00, note = '△'
+    '10:30' -> diaper_time = 10:30:00, note = None
+    """
+    s = s.strip()
+    m = re.match(r'(\d{1,2}:?\d{0,2})(.*)', s)
+    if m is not None:
+        diaper_time = parse_time(m.group(1))
+        note = m.group(2).strip() if m.group(2).strip() else None
+        return diaper_time, note
+    return None, None
 
 def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df):
     """
@@ -191,18 +207,18 @@ def main(args):
         if pd.notna(row.urine):
             tokens = str(row.urine).split()
             for token in tokens:
-                time = parse_time(token)
+                time, note = parse_diaper_entry(token)
                 if time:
-                    rec = {"date": row.date, "time": time}
+                    rec = {"date": row.date, "time": time, "note": note}
                     urine_records.append(rec)
                     print(rec)
 
         if pd.notna(row.stool):
             tokens = str(row.stool).split()
             for token in tokens:
-                time = parse_time(token)
+                time, note = parse_diaper_entry(token)
                 if time:
-                    rec = {"date": row.date, "time": time}
+                    rec = {"date": row.date, "time": time, "note": note}
                     stool_records.append(rec)
                     print(rec)
 
