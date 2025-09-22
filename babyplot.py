@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import japanize_matplotlib
+from matplotlib.lines import Line2D
 
 def parse_args():
     parser = argparse.ArgumentParser(description="授乳・おむつ記録の可視化")
@@ -101,7 +102,7 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
 
     # 色設定
     # https://colors.design4u.jp/app/index.html?hex0=%23396292&stp0=3&str0=1.0&ptn0=0&adj0=0&vvd0=0&sft0=0&pos0=3&vps0=4&hex1=%23eec346&stp1=1&str1=1.1&ptn1=0&adj1=0.34&vvd1=0&sft1=0&pos1=6&vps1=6&hex2=%239a8d79&stp2=1&str2=1.0&ptn2=1&adj2=0&vvd2=1&sft2=0&pos2=2&vps2=3
-    colors = {"直母":"#003864","搾乳":"#396292","ミルク":"#6a8fc3","尿":"#ffd457","便":"#9a8d79"}
+    colors = {"直母":"#003864","搾乳":"#396292","ミルク":"#6a8fc3","尿":"#ffd457","便":"#827663"}
     
     plt.figure(figsize=(12, 8))
     ax_eventplot = plt.subplot(2,1,1)
@@ -120,6 +121,15 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
                 hour = time.hour + time.minute / 60
                 ax_eventplot.eventplot([hour], lineoffsets=date_idx, colors=colors[kind], linelengths=0.8, orientation='vertical')
     
+    legend_elements = [
+        Line2D([0], [0], color=colors["直母"], lw=4, label='直接母乳'),
+        Line2D([0], [0], color=colors["搾乳"], lw=4, label='搾母乳'),
+        Line2D([0], [0], color=colors["ミルク"], lw=4, label='粉ミルク'),
+        Line2D([0], [0], color=colors["尿"], lw=4, label='おむつ（尿）'),
+        Line2D([0], [0], color=colors["便"], lw=4, label='おむつ（便）'),
+    ]
+    ax_eventplot.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5), title="凡例")
+
     ax_eventplot.set_xticks(range(len(all_dates)))
     ax_eventplot.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
     ax_eventplot.set_yticks([0, 6, 12, 18, 24])
@@ -128,6 +138,7 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     ax_eventplot.set_ylabel("時")
     ax_eventplot.set_xlabel("日付")
     ax_eventplot.invert_yaxis()
+    plt.setp(ax_eventplot.get_xticklabels(), rotation=90, ha="right")
 
     # 日ごとの集計
     feeding_totals = []
@@ -141,12 +152,12 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     ax_eventcount.set_title("世話の回数（日ごと）")
     ax_eventcount.set_xlabel("日付")
     ax_eventcount.set_ylabel("回数")
+    plt.setp(ax_eventcount.get_xticklabels(), rotation=90, ha="right")
 
     # 各お世話の回数
     # 授乳系を積み上げグラフに、
     markers = ['o', 'o', 'o', 'd', 'd']
     columns = ['breast', 'pumped', 'formula', 'urine', 'stool']
-    
 
     for i, col in enumerate(columns):
         ax_eventcount.plot(
