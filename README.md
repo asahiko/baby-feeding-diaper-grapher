@@ -17,7 +17,7 @@
 ## 使い方
 
 ```bash
-python main.py --file data/data.xlsx --plotter matplotlib
+python babyplot.py --file data/data.xlsx --plotter matplotlib
 ```
 
 - `-f`, `--file` 入力ファイル (.xlsx|.csv)。未指定時はハードコードされたダミーデータで動作する。
