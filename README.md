@@ -30,7 +30,7 @@ python babyplot.py --file data/data.xlsx
 - A1セルから開始し、n行6列の表を含むワークシート1枚からなるExcelワークブック
 - n行6列のCSV
 
-1行1日。各列のヘッダーとデータ形式は下記の通り: 
+1行1日。各列のヘッダー名とデータ形式は下記の通り: 
 
 ### date
 
@@ -84,3 +84,7 @@ python babyplot.py --file data/data.xlsx
 - 0 7:15 14:15 14:45△ 18△ 22
 
 △は量が少なかったことを示す。内部的にはDataFrameのNote列に記録されるが、プロットの際は無視される。
+
+### weight
+
+体重 (kg)

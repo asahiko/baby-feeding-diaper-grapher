@@ -92,7 +92,7 @@ def parse_diaper_entry(s: str):
         return diaper_time, note
     return None, None
 
-def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df):
+def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df):
     """
     Matplotlibで可視化
     Plot 1: 授乳・おむつイベントのタイムライン
@@ -101,13 +101,13 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     """
 
     # 色設定
-    # https://colors.design4u.jp/app/index.html?hex0=%23396292&stp0=3&str0=1.0&ptn0=0&adj0=0&vvd0=0&sft0=0&pos0=3&vps0=4&hex1=%23eec346&stp1=1&str1=1.1&ptn1=0&adj1=0.34&vvd1=0&sft1=0&pos1=6&vps1=6&hex2=%239a8d79&stp2=1&str2=1.0&ptn2=1&adj2=0&vvd2=1&sft2=0&pos2=2&vps2=3
-    colors = {"直母":"#003864","搾乳":"#396292","ミルク":"#6a8fc3","尿":"#ffd457","便":"#827663"}
+    colors = {"直母":"#ed8e89","搾乳":"#6a8fc3","ミルク":"#003864","尿":"#ffd457","便":"#81612f"}
     
     plt.figure(figsize=(12, 8))
     ax_eventplot = plt.subplot(2,1,1)
-    ax_eventcount = plt.subplot(2,2,3)
-    ax_milk = plt.subplot(2,2,4)
+    ax_weight = plt.subplot(2,3,4)
+    ax_eventcount = plt.subplot(2,3,5)
+    ax_milk = plt.subplot(2,3,6)
 
     # eventplot
     all_dates = sorted(set(breast_df['date']).union(set(pumped_df['date'])).union(set(formula_df['date'])).union(set(urine_df['date'])).union(set(stool_df['date'])))
@@ -119,17 +119,22 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
             time = row['time']
             if pd.notna(time):
                 hour = time.hour + time.minute / 60
-                ax_eventplot.eventplot([hour], lineoffsets=date_idx, colors=colors[kind], linelengths=0.8, orientation='vertical')
+                ax_eventplot.eventplot([hour], 
+                                       lineoffsets=date_idx, 
+                                       colors=colors[kind], 
+                                       linelengths=0.9, 
+                                       linewidths=2,
+                                       orientation='vertical')
     
     legend_elements = [
         Line2D([0], [0], color=colors["直母"], lw=4, label='直接母乳'),
         Line2D([0], [0], color=colors["搾乳"], lw=4, label='搾母乳'),
         Line2D([0], [0], color=colors["ミルク"], lw=4, label='粉ミルク'),
-        Line2D([0], [0], color=colors["尿"], lw=4, label='おむつ（尿）'),
-        Line2D([0], [0], color=colors["便"], lw=4, label='おむつ（便）'),
+        Line2D([0], [0], color=colors["尿"], lw=4, label='おむつ（小）'),
+        Line2D([0], [0], color=colors["便"], lw=4, label='おむつ（大）'),
     ]
-    ax_eventplot.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5), title="凡例")
-
+    ax_eventplot.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(0.95, 0.5), title="凡例", framealpha=1)
+    ax_eventplot.set_title("授乳・おむつ替えのタイムライン")
     ax_eventplot.set_xticks(range(len(all_dates)))
     ax_eventplot.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
     ax_eventplot.set_yticks([0, 6, 12, 18, 24])
@@ -140,6 +145,17 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     ax_eventplot.invert_yaxis()
     plt.setp(ax_eventplot.get_xticklabels(), rotation=90, ha="right")
 
+    # 体重グラフ
+    if not weight_df.empty:
+        ax_weight.plot(weight_df['date'], weight_df['weight'], marker='o', color='gray')
+    else:
+        ax_weight.text(0.5, 0.5, "体重データなし", horizontalalignment='center', verticalalignment='center', transform=ax_weight.transAxes)
+    ax_weight.set_title("体重の推移")
+    ax_weight.set_xlabel("日付")
+    ax_weight.set_ylabel("体重 (kg)")
+    ax_weight.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+    plt.setp(ax_weight.get_xticklabels(), rotation=90, ha="right")
+
     # 日ごとの集計
     feeding_totals = []
     direct_totals = []
@@ -149,7 +165,8 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
         breast_total = breast_df[breast_df['date'] == date]['length'].sum() if not breast_df[breast_df['date'] == date].empty else 0
         feeding_totals.append([date, pumped_total, formula_total])
         direct_totals.append([date, breast_total])
-    ax_eventcount.set_title("世話の回数（日ごと）")
+    ax_eventcount.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+    ax_eventcount.set_title("回数（日ごと24時間合計）")
     ax_eventcount.set_xlabel("日付")
     ax_eventcount.set_ylabel("回数")
     plt.setp(ax_eventcount.get_xticklabels(), rotation=90, ha="right")
@@ -170,14 +187,15 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
 
     # 搾乳 + ミルク (積み上げ棒)
     feeding_df = pd.DataFrame(feeding_totals, columns=["date","搾乳","ミルク"])
-    feeding_df.plot(kind="bar", stacked=True, ax=ax_milk, x="date", y=["搾乳","ミルク"],
-                    color=[colors["搾乳"], colors["ミルク"]]
-                    )
-    ax_milk.set_xticks(range(len(all_dates)))
-    ax_milk.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
+    # x軸を日付型でbar描画
+    ax_milk.bar(feeding_df["date"], feeding_df["搾乳"], color=colors["搾乳"], label="搾母乳")
+    ax_milk.bar(feeding_df["date"], feeding_df["ミルク"], bottom=feeding_df["搾乳"], color=colors["ミルク"], label="粉ミルク")
+    ax_milk.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+    plt.setp(ax_milk.get_xticklabels(), rotation=90, ha="right")
+    ax_milk.set_xlabel("日付")
     ax_milk.set_ylabel("授乳量 (ml)")
     ax_milk.set_title("1日ごとの授乳量（直母含まず）")
-    ax_milk.legend(title="授乳方法")
+    ax_milk.legend()
 
     plt.tight_layout()
     plt.show()
@@ -195,6 +213,7 @@ def main(args):
     urine_records = []
     stool_records = []
     count_records = []
+    weight_records = []
     
     for row in df.itertuples():
         if pd.notna(row.breast):
@@ -242,6 +261,9 @@ def main(args):
                 if time:
                     rec = {"date": row.date, "time": time, "note": note}
                     stool_records.append(rec)
+
+        if pd.notna(row.weight):
+            weight_records.append({"date": row.date, "weight": row.weight})
         
         # 日毎の各お世話の回数の集計
         print(f"=== {row.date} の集計 ===")
@@ -259,6 +281,7 @@ def main(args):
     urine_df = pd.DataFrame(urine_records)
     stool_df = pd.DataFrame(stool_records)
     count_df = pd.DataFrame(count_records)
+    weight_df = pd.DataFrame(weight_records)
 
     # DEBUG: 各記録のDataFrameをprint
     print("=== 直接母乳 ===")
@@ -276,7 +299,7 @@ def main(args):
 
     # ---------- 可視化 ----------
     if args.plotter == "matplotlib":
-        plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df)
+        plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df)
     elif args.plotter == "plotly":
         print("Plotlyによる可視化は未実装です")
     else:
