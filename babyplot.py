@@ -13,6 +13,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="授乳・おむつ記録の可視化")
     parser.add_argument("-f", "--file", help="入力ファイル, CSV or Excel (xlsx)")
     parser.add_argument("-p", "--plotter", choices=["matplotlib", "plotly"], default="matplotlib", help="プロットライブラリの選択 (デフォルト: matplotlib)")
+    parser.add_argument("-o", "--output", help="出力ファイル (指定しない場合は画面表示のみ)")
     return parser.parse_args()
 
 def load_data(filename: str | None = None):
@@ -94,7 +95,7 @@ def parse_diaper_entry(s: str):
         return diaper_time, note
     return None, None
 
-def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df):
+def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df, output_path=None):
     colors = {"直母":"#ed8e89","搾乳":"#003864","ミルク":"#6a8fc3","尿":"#ffd457","便":"#81612f"}
     
     fig = plt.figure(figsize=(14, 10))
@@ -199,6 +200,9 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     plt.setp(ax_weight.get_xticklabels(), rotation=90, ha="right")
 
     plt.tight_layout()
+    if output_path:
+        plt.savefig(output_path)
+        print(f"Image saved to: {output_path}")
     plt.show()
 
 # ---------- メイン処理 ----------
@@ -300,7 +304,7 @@ def main(args):
 
     # ---------- 可視化 ----------
     if args.plotter == "matplotlib":
-        plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df)
+        plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df, output_path=args.output)
     elif args.plotter == "plotly":
         print("Plotlyによる可視化は未実装です")
     else:
