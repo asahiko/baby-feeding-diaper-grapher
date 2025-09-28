@@ -5,6 +5,7 @@ import re
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.gridspec as gridspec
 import japanize_matplotlib
 from matplotlib.lines import Line2D
 
@@ -23,7 +24,8 @@ def load_data(filename: str | None = None):
             "pumped": ["09:00-60 14:00-40", "10:00-50"],
             "formula": ["12:30-100a 18:30-80", "13:00-120"],
             "urine": ["07:00 10:00 15:30", "08:00 12:00"],
-            "stool": ["09:00 13:00△", "09:30× 16:00"]
+            "stool": ["09:00 13:00△", "09:30× 16:00"],
+            "weight": [4.5, 4.7]
         }
         df = pd.DataFrame(data)
     else:
@@ -93,22 +95,15 @@ def parse_diaper_entry(s: str):
     return None, None
 
 def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df):
-    """
-    Matplotlibで可視化
-    Plot 1: 授乳・おむつイベントのタイムライン
-    Plot 2: 日ごとの授乳量 (搾乳 + ミルク)
-    Plot 3: 日ごとの直母授乳時間
-    """
-
-    # 色設定
-    colors = {"直母":"#ed8e89","搾乳":"#6a8fc3","ミルク":"#003864","尿":"#ffd457","便":"#81612f"}
+    colors = {"直母":"#ed8e89","搾乳":"#003864","ミルク":"#6a8fc3","尿":"#ffd457","便":"#81612f"}
     
-    plt.figure(figsize=(12, 8))
-    ax_eventplot = plt.subplot(2,1,1)
-    ax_weight = plt.subplot(2,3,4)
-    ax_eventcount = plt.subplot(2,3,5)
-    ax_milk = plt.subplot(2,3,6)
-
+    fig = plt.figure(figsize=(14, 10))
+    gs = gridspec.GridSpec(4, 4, figure=fig)
+    ax_eventplot = fig.add_subplot(gs[0:2, :])
+    ax_eventcount = fig.add_subplot(gs[2:4, 0:2])
+    ax_milk = fig.add_subplot(gs[2:4, 2])
+    ax_weight = fig.add_subplot(gs[2:4, 3])
+    
     # eventplot
     all_dates = sorted(set(breast_df['date']).union(set(pumped_df['date'])).union(set(formula_df['date'])).union(set(urine_df['date'])).union(set(stool_df['date'])))
     date_to_index = {date: idx for idx, date in enumerate(all_dates)}
@@ -136,25 +131,19 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     ax_eventplot.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(0.95, 0.5), title="凡例", framealpha=1)
     ax_eventplot.set_title("授乳・おむつ替えのタイムライン")
     ax_eventplot.set_xticks(range(len(all_dates)))
-    ax_eventplot.set_xticklabels([date.strftime("%m/%d") for date in all_dates])
+    # 2日おきにラベル、それ以外は空文字
+    xticklabels = [
+        date.strftime("%m/%d") if i % 2 == 0 else ""
+        for i, date in enumerate(all_dates)
+    ]
+    ax_eventplot.set_xticklabels(xticklabels)
+    plt.setp(ax_eventplot.get_xticklabels(), rotation=90, ha="right")
     ax_eventplot.set_yticks([0, 6, 12, 18, 24])
     ax_eventplot.set_yticks(range(0, 24), minor=True)
     ax_eventplot.set_ylim(0, 24)
     ax_eventplot.set_ylabel("時")
     ax_eventplot.set_xlabel("日付")
     ax_eventplot.invert_yaxis()
-    plt.setp(ax_eventplot.get_xticklabels(), rotation=90, ha="right")
-
-    # 体重グラフ
-    if not weight_df.empty:
-        ax_weight.plot(weight_df['date'], weight_df['weight'], marker='o', color='gray')
-    else:
-        ax_weight.text(0.5, 0.5, "体重データなし", horizontalalignment='center', verticalalignment='center', transform=ax_weight.transAxes)
-    ax_weight.set_title("体重の推移")
-    ax_weight.set_xlabel("日付")
-    ax_weight.set_ylabel("体重 (kg)")
-    ax_weight.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-    plt.setp(ax_weight.get_xticklabels(), rotation=90, ha="right")
 
     # 日ごとの集計
     feeding_totals = []
@@ -166,7 +155,7 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
         feeding_totals.append([date, pumped_total, formula_total])
         direct_totals.append([date, breast_total])
     ax_eventcount.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-    ax_eventcount.set_title("回数（日ごと24時間合計）")
+    ax_eventcount.set_title("24時間合計")
     ax_eventcount.set_xlabel("日付")
     ax_eventcount.set_ylabel("回数")
     plt.setp(ax_eventcount.get_xticklabels(), rotation=90, ha="right")
@@ -194,8 +183,20 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     plt.setp(ax_milk.get_xticklabels(), rotation=90, ha="right")
     ax_milk.set_xlabel("日付")
     ax_milk.set_ylabel("授乳量 (ml)")
-    ax_milk.set_title("1日ごとの授乳量（直母含まず）")
+    ax_milk.set_title("授乳量（直母含まず）")
     ax_milk.legend()
+
+    # 体重グラフ
+    if not weight_df.empty:
+        ax_weight.plot(weight_df['date'], weight_df['weight'], marker='o', color='gray')
+    else:
+        ax_weight.text(0.5, 0.5, "体重データなし", horizontalalignment='center', verticalalignment='center', transform=ax_weight.transAxes)
+    ax_weight.set_title("体重")
+    ax_weight.set_xlabel("日付")
+    ax_weight.set_ylabel("体重 (kg)")
+    ax_weight.set_ylim(0, None)
+    ax_weight.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+    plt.setp(ax_weight.get_xticklabels(), rotation=90, ha="right")
 
     plt.tight_layout()
     plt.show()
@@ -262,7 +263,7 @@ def main(args):
                     rec = {"date": row.date, "time": time, "note": note}
                     stool_records.append(rec)
 
-        if pd.notna(row.weight):
+        if hasattr(row, "weight") and pd.notna(getattr(row, "weight", None)):
             weight_records.append({"date": row.date, "weight": row.weight})
         
         # 日毎の各お世話の回数の集計
