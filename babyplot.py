@@ -10,6 +10,7 @@ import japanize_matplotlib
 from matplotlib.lines import Line2D
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 def parse_args():
     parser = argparse.ArgumentParser(description="授乳・おむつ記録の可視化")
@@ -209,9 +210,14 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
 
 def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df, output_path=None):
     colors = {"breast":"#ed8e89","pumped":"#003864","formula":"#6a8fc3","urine":"#ffd457","stool":"#81612f"}
-    fig = go.Figure()
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.1,
+        row_heights=[0.6, 0.4],
+        subplot_titles=("タイムライン", "24時間合計")
+    )
 
-    # eventplot
     for df, name, color in [
         (breast_df, "直接母乳", colors["breast"]),
         (pumped_df, "搾母乳", colors["pumped"]),
@@ -221,21 +227,54 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
     ]:
         if not df.empty:
             fig.add_trace(go.Scatter(
-                x=df["date"],
-                y=[t.hour + t.minute / 60 for t in df["time"]],
+                    x=df["date"],
+                    y=[t.hour + t.minute / 60 for t in df["time"]],
+                    mode='markers',
+                    name=name,
+                    marker=dict(
+                        color=color, size=10,
+                        line=dict(width=3, color=color)
+                        ),
+                    marker_symbol='line-ew',
+                ),
+                row=1, col=1
+            )
+    fig.update_yaxes(
+        title_text="時", 
+        range=[0, 24], 
+        dtick=2,
+        autorange="reversed",
+        autorangeoptions=dict(minallowed=0, maxallowed=24),
+        row=1, col=1
+    )
 
-                mode='markers',
-                name=name,
-                marker=dict(
-                    color=color, size=10,
-                    line=dict(width=3, color=color)
-                    ),
-                marker_symbol='line-ew'
-            ))
-    fig.update_yaxes(title_text="時", range=[0, 24], dtick=1, autorange="reversed")
-    fig.update_xaxes(title_text="日付", tickformat="%m/%d")
-    fig.update_layout(title="授乳・おむつ替えのタイムライン")
-    
+    if not count_df.empty:
+        for col, name, color in [
+            ("breast", "直接母乳", colors["breast"]),
+            ("pumped", "搾母乳", colors["pumped"]),
+            ("formula", "粉ミルク", colors["formula"]),
+            ("urine", "おむつ交換（尿）", colors["urine"]),
+            ("stool", "おむつ交換（便）", colors["stool"])
+        ]:
+            fig.add_trace(go.Scatter(
+                    x=count_df["date"],
+                    y=count_df[col],
+                    mode='lines+markers',
+                    name=name,
+                    marker=dict(color=color, size=8),
+                    line=dict(color=color, width=2),
+                ),
+                row=2, col=1
+            )
+    fig.update_yaxes(title_text="回数", row=2, col=1)
+
+    fig.update_xaxes(tickformat="%m/%d", row=1, col=1)
+    fig.update_xaxes(title_text="日付", tickformat="%m/%d", row=2, col=1)
+    fig.update_layout(xaxis_showticklabels=True)
+
+    if output_path:
+        fig.write_image(output_path)
+        print(f"Image saved to: {output_path}")
     fig.show()
 
 # ---------- メイン処理 ----------
