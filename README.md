@@ -21,8 +21,8 @@ python babyplot.py --file data/data.xlsx --output data/graph.png
 ```
 
 - `-f`, `--file` 入力ファイル (.xlsx|.csv)。未指定時はハードコードされたダミーデータで動作する。
-- `-o`, `--output` プロット結果を画像として保存。プロットライブラリがmatplotlibのときに機能。画像形式はmatplotlibの機能により拡張子から自動判別。
-- `-p`, `--plotter` プロットに使うライブラリ（現在はmatplotlibのみに対応）
+- `-o`, `--output` プロット結果を画像として保存。画像形式はプロットライブラリの機能により拡張子から自動判別。
+- `-p`, `--plotter` プロットに使うライブラリ (matplotlib, plotly)
 
 ## データ形式
 
