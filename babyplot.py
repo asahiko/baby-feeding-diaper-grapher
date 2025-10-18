@@ -228,9 +228,10 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
         shared_xaxes=True,
         vertical_spacing=0.1,
         row_heights=[0.5, 0.25, 0.25],
-        subplot_titles=("タイムライン", "24時間合計", "授乳量（直母含まず）")
+        subplot_titles=("タイムライン", "24時間合計", "授乳量")
     )
 
+    # --- タイムライン（上段） ---
     for df, name, color in [
         (breast_df, "直接母乳", colors["breast"]),
         (pumped_df, "搾母乳", colors["pumped"]),
@@ -238,20 +239,21 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
         (urine_df, "おむつ（小）", colors["urine"]),
         (stool_df, "おむつ（大）", colors["stool"])
     ]:
-        if not df.empty:
-            fig.add_trace(go.Scatter(
-                    x=df["date"],
-                    y=[t.hour + t.minute / 60 for t in df["time"]],
-                    mode='markers',
-                    name=name,
-                    marker=dict(
-                        color=color, size=10,
-                        line=dict(width=3, color=color)
-                        ),
-                    marker_symbol='line-ew',
+        if df is None or df.empty or "date" not in df.columns or "time" not in df.columns:
+            continue
+        fig.add_trace(go.Scatter(
+                x=pd.to_datetime(df["date"]).dt.date,
+                y=[t.hour + t.minute / 60 for t in df["time"]],
+                mode='markers',
+                name=name,
+                marker=dict(
+                    color=color, size=10,
+                    line=dict(width=3, color=color)
                 ),
-                row=1, col=1
-            )
+                marker_symbol='line-ew',
+            ),
+            row=1, col=1
+        )
     fig.update_yaxes(
         title_text="時", 
         range=[0, 24], 
@@ -261,7 +263,8 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
         row=1, col=1
     )
 
-    if not count_df.empty:
+    # --- 24時間合計（中段） ---
+    if count_df is not None and not count_df.empty and "date" in count_df.columns:
         for col, name, color in [
             ("breast", "直接母乳", colors["breast"]),
             ("pumped", "搾母乳", colors["pumped"]),
@@ -269,8 +272,10 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
             ("urine", "おむつ交換（尿）", colors["urine"]),
             ("stool", "おむつ交換（便）", colors["stool"])
         ]:
+            if col not in count_df.columns:
+                continue
             fig.add_trace(go.Scatter(
-                    x=count_df["date"],
+                    x=pd.to_datetime(count_df["date"]).dt.date,
                     y=count_df[col],
                     mode='lines+markers',
                     name=name,
@@ -281,9 +286,63 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
             )
     fig.update_yaxes(title_text="回数", row=2, col=1)
 
-    fig.update_xaxes(tickformat="%m/%d", row=1, col=1)
-    fig.update_xaxes(title_text="日付", tickformat="%m/%d", row=2, col=1)
-    fig.update_layout(xaxis_showticklabels=True)
+    # --- 下段: 授乳量の積み上げ棒（搾乳 + 粉ミルク） ---
+    # all_dates を安全に作る（各DFの date を統一して収集）
+    date_sets = []
+    for d in [breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df]:
+        if d is not None and not d.empty and "date" in d.columns:
+            date_sets.append(set(pd.to_datetime(d["date"]).dt.date))
+    all_dates = sorted(set().union(*date_sets)) if date_sets else []
+
+    if all_dates:
+        idx = pd.Index(all_dates)
+
+        if pumped_df is not None and not pumped_df.empty and "date" in pumped_df.columns and "amount" in pumped_df.columns:
+            pumped_sum = pumped_df.groupby(pd.to_datetime(pumped_df["date"]).dt.date)["amount"].sum()
+        else:
+            pumped_sum = pd.Series(dtype=float)
+
+        if formula_df is not None and not formula_df.empty and "date" in formula_df.columns and "amount" in formula_df.columns:
+            formula_sum = formula_df.groupby(pd.to_datetime(formula_df["date"]).dt.date)["amount"].sum()
+        else:
+            formula_sum = pd.Series(dtype=float)
+
+        pumped_vals = pumped_sum.reindex(idx, fill_value=0).astype(float).to_list()
+        formula_vals = formula_sum.reindex(idx, fill_value=0).astype(float).to_list()
+
+        fig.add_trace(go.Bar(
+            x=all_dates,
+            y=pumped_vals,
+            name="搾母乳 (ml)",
+            marker_color=colors["pumped"],
+            opacity=0.9
+        ), row=3, col=1)
+        fig.add_trace(go.Bar(
+            x=all_dates,
+            y=formula_vals,
+            name="粉ミルク (ml)",
+            marker_color=colors["formula"],
+            opacity=0.9
+        ), row=3, col=1)
+    else:
+        # データが全くない場合は空プロットにしておく
+        fig.add_trace(go.Scatter(x=[None], y=[None], showlegend=False), row=3, col=1)
+
+    fig.update_yaxes(title_text="授乳量 (ml)", row=3, col=1)
+
+    # x軸（日付）表示を各行に設定
+    fig.update_xaxes(tickformat="%m/%d", row=1, col=1, showticklabels=True)
+    fig.update_xaxes(tickformat="%m/%d", row=2, col=1, showticklabels=True)
+    fig.update_xaxes(title_text="日付", tickformat="%m/%d", row=3, col=1, showticklabels=True)
+
+    fig.update_layout(
+        height=900,
+        title_text="授乳・おむつ・授乳量の記録",
+        legend_title="凡例",
+        barmode="stack",
+        scattermode="group",
+        margin=dict(l=60, r=60, t=80, b=60)
+    )
 
     if output_path:
         fig.write_image(output_path)
