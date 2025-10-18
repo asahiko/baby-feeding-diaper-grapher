@@ -109,19 +109,29 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     ax_weight = fig.add_subplot(gs[2:4, 3])
     
     # eventplot
-    all_dates = sorted(set(breast_df['date']).union(set(pumped_df['date'])).union(set(formula_df['date'])).union(set(urine_df['date'])).union(set(stool_df['date'])))
+    # 各DFに 'date' カラムがあるかを確認して日付集合を作成（空DFやカラム欠如に対応）
+    date_sets = []
+    for d in [breast_df, pumped_df, formula_df, urine_df, stool_df]:
+        if d is not None and not d.empty and "date" in d.columns:
+            # date 列は既に date 型（load_dataで変換済み）を想定
+            date_sets.append(set(d["date"]))
+    all_dates = sorted(set().union(*date_sets)) if date_sets else []
     date_to_index = {date: idx for idx, date in enumerate(all_dates)}
-    
+ 
     for df, kind in [(breast_df, "直母"), (pumped_df, "搾乳"), (formula_df, "ミルク"), (urine_df, "尿"), (stool_df, "便")]:
+        if df is None or df.empty or "date" not in df.columns or "time" not in df.columns:
+            continue
         for i, row in df.iterrows():
+            if row['date'] not in date_to_index:
+                continue
             date_idx = date_to_index[row['date']]
             time = row['time']
             if pd.notna(time):
                 hour = time.hour + time.minute / 60
-                ax_eventplot.eventplot([hour], 
-                                       lineoffsets=date_idx, 
-                                       colors=colors[kind], 
-                                       linelengths=0.9, 
+                ax_eventplot.eventplot([hour],
+                                       lineoffsets=date_idx,
+                                       colors=colors[kind],
+                                       linelengths=0.9,
                                        linewidths=2,
                                        orientation='vertical')
     
@@ -169,14 +179,17 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     markers = ['o', 'o', 'o', 'd', 'd']
     columns = ['breast', 'pumped', 'formula', 'urine', 'stool']
 
-    for i, col in enumerate(columns):
-        ax_eventcount.plot(
-            count_df['date'],
-            count_df[col],
-            marker=markers[i],
-            color=colors[["直母", "搾乳", "ミルク", "尿", "便"][i]],
-            label=["直接母乳", "搾母乳", "粉ミルク", "おむつ交換（尿）", "おむつ交換（便）"][i]
-        )
+    if count_df is not None and not count_df.empty and "date" in count_df.columns:
+        for i, col in enumerate(columns):
+            if col not in count_df.columns:
+                continue
+            ax_eventcount.plot(
+                count_df['date'],
+                count_df[col],
+                marker=markers[i],
+                color=colors[["直母", "搾乳", "ミルク", "尿", "便"][i]],
+                label=["直接母乳", "搾母乳", "粉ミルク", "おむつ交換（尿）", "おむつ交換（便）"][i]
+            )
 
     # 搾乳 + ミルク (積み上げ棒)
     feeding_df = pd.DataFrame(feeding_totals, columns=["date","搾乳","ミルク"])
@@ -191,7 +204,7 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     ax_milk.legend()
 
     # 体重グラフ
-    if not weight_df.empty:
+    if weight_df is not None and not weight_df.empty and "date" in weight_df.columns and "weight" in weight_df.columns:
         ax_weight.plot(weight_df['date'], weight_df['weight'], marker='o', color='gray')
     else:
         ax_weight.text(0.5, 0.5, "体重データなし", horizontalalignment='center', verticalalignment='center', transform=ax_weight.transAxes)
@@ -211,11 +224,11 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
 def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df, output_path=None):
     colors = {"breast":"#ed8e89","pumped":"#003864","formula":"#6a8fc3","urine":"#ffd457","stool":"#81612f"}
     fig = make_subplots(
-        rows=2, cols=1,
+        rows=3, cols=1,
         shared_xaxes=True,
         vertical_spacing=0.1,
-        row_heights=[0.6, 0.4],
-        subplot_titles=("タイムライン", "24時間合計")
+        row_heights=[0.5, 0.25, 0.25],
+        subplot_titles=("タイムライン", "24時間合計", "授乳量（直母含まず）")
     )
 
     for df, name, color in [
