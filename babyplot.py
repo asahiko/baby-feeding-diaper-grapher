@@ -2,6 +2,7 @@ import os
 import argparse
 import datetime
 import re
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -105,8 +106,8 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
     gs = gridspec.GridSpec(4, 4, figure=fig)
     ax_eventplot = fig.add_subplot(gs[0:2, :])
     ax_eventcount = fig.add_subplot(gs[2:4, 0:2])
-    ax_milk = fig.add_subplot(gs[2:4, 2])
-    ax_weight = fig.add_subplot(gs[2:4, 3])
+    ax_milk = fig.add_subplot(gs[2:3, 2:4])
+    ax_weight = fig.add_subplot(gs[3:4, 2:4])
     
     # eventplot
     # 各DFに 'date' カラムがあるかを確認して日付集合を作成（空DFやカラム欠如に対応）
@@ -193,27 +194,53 @@ def plot_with_matplotlib(breast_df, pumped_df, formula_df, urine_df, stool_df, c
 
     # 搾乳 + ミルク (積み上げ棒)
     feeding_df = pd.DataFrame(feeding_totals, columns=["date","搾乳","ミルク"])
-    # x軸を日付型でbar描画
+    # x軸を日付型でbar描画（左のY軸：授乳量）
     ax_milk.bar(feeding_df["date"], feeding_df["搾乳"], color=colors["搾乳"], label="搾母乳")
     ax_milk.bar(feeding_df["date"], feeding_df["ミルク"], bottom=feeding_df["搾乳"], color=colors["ミルク"], label="粉ミルク")
     ax_milk.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
     plt.setp(ax_milk.get_xticklabels(), rotation=90, ha="right")
     ax_milk.set_xlabel("日付")
-    ax_milk.set_ylabel("授乳量 (ml)")
-    ax_milk.set_title("授乳量（直母含まず）")
+    ax_milk.set_ylabel("哺乳瓶授乳量 (ml)")
+    ax_milk.set_title("授乳量")
     ax_milk.legend()
 
-    # 体重グラフ
-    if weight_df is not None and not weight_df.empty and "date" in weight_df.columns and "weight" in weight_df.columns:
-        ax_weight.plot(weight_df['date'], weight_df['weight'], marker='o', color='gray')
+    # --- 追加: 右の第2軸に「直母合計（分）」を重ねる ---
+    # direct_totals は earlier に作成済み（[date, breast_total]）
+    direct_df = pd.DataFrame(direct_totals, columns=["date", "直母"]) if direct_totals else pd.DataFrame(columns=["date","直母"])
+    if not direct_df.empty:
+        # 0分の場合NaNにしてプロットしないことにする
+        direct_df["直母_plot"] = direct_df["直母"].replace({0: np.nan})
+        ax_milk2 = ax_milk.twinx()
+        ax_milk2.plot(direct_df["date"], direct_df["直母_plot"], color=colors["直母"], marker='o', linestyle='-', markeredgecolor="#333", label="直母授乳時間 (分)")
+        ax_milk2.set_ylabel("直母授乳時間 (分)")
+        # 目盛りの見やすさを少し調整
+        max_ml = max(feeding_df[["搾乳","ミルク"]].sum(axis=1).max() if not feeding_df.empty else 0, 1)
+        max_min = max(direct_df["直母"].max(), 1)
+        ax_milk.set_ylim(0, max_ml * 1.15)
+        ax_milk2.set_ylim(0, max_min * 1.2)
+        # 凡例をまとめて表示
+        lines, labels = ax_milk.get_legend_handles_labels()
+        lines2, labels2 = ax_milk2.get_legend_handles_labels()
+        ax_milk.legend(lines + lines2, labels + labels2, loc="upper left")
     else:
-        ax_weight.text(0.5, 0.5, "体重データなし", horizontalalignment='center', verticalalignment='center', transform=ax_weight.transAxes)
-    ax_weight.set_title("体重")
-    ax_weight.set_xlabel("日付")
-    ax_weight.set_ylabel("体重 (kg)")
-    ax_weight.set_ylim(0, None)
-    ax_weight.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
-    plt.setp(ax_weight.get_xticklabels(), rotation=90, ha="right")
+        # direct_df empty のときは右軸表示しない
+        pass
+
+    # 体重プロット
+    if weight_df is not None and not weight_df.empty and "date" in weight_df.columns and "weight" in weight_df.columns:
+        ax_weight.plot(
+            weight_df['date'],
+            weight_df['weight'],
+            marker='s',
+            color='#396292',
+            label='体重 (kg)'
+        )
+        ax_weight.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+        ax_weight.set_title("体重の推移")
+        ax_weight.set_xlabel("日付")
+        ax_weight.set_ylabel("体重 (kg)")
+        plt.setp(ax_weight.get_xticklabels(), rotation=90, ha="right")
+        ax_weight.legend()
 
     plt.tight_layout()
     if output_path:
@@ -228,16 +255,17 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
         shared_xaxes=True,
         vertical_spacing=0.1,
         row_heights=[0.5, 0.25, 0.25],
+        specs=[[{"type":"xy"}], [{"type":"xy"}], [{"type":"xy", "secondary_y": True}]],
         subplot_titles=("タイムライン", "24時間合計", "授乳量")
     )
 
     # --- タイムライン（上段） ---
-    for df, name, color in [
-        (breast_df, "直接母乳", colors["breast"]),
-        (pumped_df, "搾母乳", colors["pumped"]),
-        (formula_df, "粉ミルク", colors["formula"]),
-        (urine_df, "おむつ（小）", colors["urine"]),
-        (stool_df, "おむつ（大）", colors["stool"])
+    for df, name, color, markerwidth in [
+        (breast_df, "直接母乳", colors["breast"], 3),
+        (pumped_df, "搾母乳", colors["pumped"], 3),
+        (formula_df, "粉ミルク", colors["formula"], 3),
+        (urine_df, "おむつ（小）", colors["urine"], 1.5),
+        (stool_df, "おむつ（大）", colors["stool"], 3)
     ]:
         if df is None or df.empty or "date" not in df.columns or "time" not in df.columns:
             continue
@@ -248,7 +276,7 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
                 name=name,
                 marker=dict(
                     color=color, size=10,
-                    line=dict(width=3, color=color)
+                    line=dict(width=markerwidth, color=color)
                 ),
                 marker_symbol='line-ew',
             ),
@@ -286,7 +314,7 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
             )
     fig.update_yaxes(title_text="回数", row=2, col=1)
 
-    # --- 下段: 授乳量の積み上げ棒（搾乳 + 粉ミルク） ---
+    # --- 下段: 授乳量の積み上げ棒（搾乳 + 粉ミルク） + 右軸に直母合計(分) を重ねる ---
     # all_dates を安全に作る（各DFの date を統一して収集）
     date_sets = []
     for d in [breast_df, pumped_df, formula_df, urine_df, stool_df, count_df, weight_df]:
@@ -307,28 +335,48 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
         else:
             formula_sum = pd.Series(dtype=float)
 
+        # 直母の合計（分）を集計
+        if breast_df is not None and not breast_df.empty and "date" in breast_df.columns and "length" in breast_df.columns:
+            breast_sum = breast_df.groupby(pd.to_datetime(breast_df["date"]).dt.date)["length"].sum()
+        else:
+            breast_sum = pd.Series(dtype=float)
+
         pumped_vals = pumped_sum.reindex(idx, fill_value=0).astype(float).to_list()
         formula_vals = formula_sum.reindex(idx, fill_value=0).astype(float).to_list()
+        breast_vals = breast_sum.reindex(idx, fill_value=0).astype(float).to_list()
+        breast_vals_plot = [val if val > 0 else None for val in breast_vals]
 
+        # 棒（左軸）
         fig.add_trace(go.Bar(
             x=all_dates,
             y=pumped_vals,
             name="搾母乳 (ml)",
             marker_color=colors["pumped"],
             opacity=0.9
-        ), row=3, col=1)
+        ), row=3, col=1, secondary_y=False)
         fig.add_trace(go.Bar(
             x=all_dates,
             y=formula_vals,
             name="粉ミルク (ml)",
             marker_color=colors["formula"],
             opacity=0.9
-        ), row=3, col=1)
+        ), row=3, col=1, secondary_y=False)
+
+        # 直母合計を右軸に折れ線で重ねる
+        fig.add_trace(go.Scatter(
+            x=all_dates,
+            y=breast_vals_plot,
+            name="直母 (分)",
+            mode="lines+markers",
+            line=dict(color=colors["breast"], width=2),
+            marker=dict(color=colors["breast"], size=8, line=dict(width=1, color="#333333"))
+        ), row=3, col=1, secondary_y=True)
     else:
-        # データが全くない場合は空プロットにしておく
         fig.add_trace(go.Scatter(x=[None], y=[None], showlegend=False), row=3, col=1)
 
-    fig.update_yaxes(title_text="授乳量 (ml)", row=3, col=1)
+    # 右軸（直母合計）のタイトルを設定
+    fig.update_yaxes(title_text="哺乳瓶授乳量 (ml)", row=3, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="直母授乳時間 (分)", row=3, col=1, secondary_y=True)
 
     # x軸（日付）表示を各行に設定
     fig.update_xaxes(tickformat="%m/%d", row=1, col=1, showticklabels=True)
