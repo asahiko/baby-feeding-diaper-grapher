@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # use the new data module
-from babyplot_data import load_raw_df, parse_records
+from babyparse import load_raw_df, parse_records
 
 def parse_args():
     parser = argparse.ArgumentParser(description="授乳・おむつ記録の可視化")
@@ -24,10 +24,9 @@ def parse_args():
     return parser.parse_args()
 
 def load_data(filename: str | None = None):
-    """Backward-compatible wrapper around babyplot_data.load_raw_df
+    """Wrapper around babyparse.load_raw_df
 
-    This keeps the original CLI behaviour while delegating parsing to
-    `babyplot_data`.
+    This keeps the CLI behaviour while delegating parsing to babyparse.
     """
     return load_raw_df(filename)
     

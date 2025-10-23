@@ -106,11 +106,11 @@ python babyplot.py --file data/data.xlsx --output data/graph.png
 
 ### Jupyter Notebook / スクリプトからの利用（データパース専用API）
 
-ノートブック等でデータだけを読み込んで加工したい場合は、`babyplot_data` モジュールの関数を使えます。
+ノートブック等でデータだけを読み込んで加工したい場合は、`babyparse` モジュールの関数を使えます。
 例:
 
 ```python
-from babyplot_data import load_raw_df, parse_records
+from babyparse import load_raw_df, parse_records
 
 # ファイルから読み込み（CSV or Excel）
 raw = load_raw_df("data/data.xlsx")
