@@ -125,3 +125,14 @@ stool_df = dfs["stool"]
 count_df = dfs["count"]
 weight_df = dfs["weight"]
 ```
+
+> [!NOTE]
+> 注意: `parse_records` が返す各 DataFrame の `date` 列は Python の `datetime.date` 型に正規化されています。DataFrame 間で型が混在すると比較や再インデックスで期待どおり動かないことがあるため、必要に応じて型を揃えてください。
+> 
+> ```python
+> # datetime.date に揃える（例）
+> df["date"] = pd.to_datetime(df["date"]).dt.date
+> 
+> # または pandas の Timestamp に揃える
+> df["date"] = pd.to_datetime(df["date"])
+> ```
