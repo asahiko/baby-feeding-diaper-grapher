@@ -13,6 +13,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+# use the new data module
+from babyparse import load_raw_df, parse_records
+
 def parse_args():
     parser = argparse.ArgumentParser(description="授乳・おむつ記録の可視化")
     parser.add_argument("-f", "--file", help="入力ファイル, CSV or Excel (xlsx)")
@@ -21,31 +24,11 @@ def parse_args():
     return parser.parse_args()
 
 def load_data(filename: str | None = None):
-    if filename is None:
-        print("入力ファイルなし、デフォルトデータで例示")
-        data = {
-            "date": ["2025-09-15", "2025-09-16"],
-            "breast": ["08:00L15R20 11:30○", "07:30L20R15"],
-            "pumped": ["09:00-60 14:00-40", "10:00-50"],
-            "formula": ["12:30-100a 18:30-80", "13:00-120"],
-            "urine": ["07:00 10:00 15:30", "08:00 12:00"],
-            "stool": ["09:00 13:00△", "09:30× 16:00"],
-            "weight": [4.5, 4.7]
-        }
-        df = pd.DataFrame(data)
-    else:
-        if filename.endswith(".csv"):
-            df = pd.read_csv(filename)
-        elif filename.endswith(".xlsx"):
-            df = pd.read_excel(filename)
-        else:
-            raise ValueError("対応しているのはCSVかExcelファイルのみです")
-            
-        if "date" not in df.columns:
-            raise ValueError("CSVには 'date' 列が必要です")
-        
-    df["date"] = pd.to_datetime(df["date"]).dt.date
-    return df
+    """Wrapper around babyparse.load_raw_df
+
+    This keeps the CLI behaviour while delegating parsing to babyparse.
+    """
+    return load_raw_df(filename)
     
 def parse_time(s):
     s = s.strip()
@@ -399,86 +382,16 @@ def plot_with_plotly(breast_df, pumped_df, formula_df, urine_df, stool_df, count
 
 # ---------- メイン処理 ----------
 def main(args):
-    if args.file and os.path.exists(args.file):
-        df = load_data(args.file)
-    else:
-        df = load_data()  # サンプルデータ呼出
-        
-    breast_records = []
-    pumped_records = []
-    formula_records = []
-    urine_records = []
-    stool_records = []
-    count_records = []
-    weight_records = []
-    
-    for row in df.itertuples():
-        if pd.notna(row.breast):
-            tokens = str(row.breast).split()
-            for token in tokens:
-                time, length, note = parse_breast_entry(token)
-                if time:
-                    rec = {"date": row.date, "time": time, "length": length, "note": note}
-                    breast_records.append(rec)
-            
-        if pd.notna(row.pumped):
-            tokens = str(row.pumped).split()
-            for token in tokens:
-                m = re.match(r'(\d{1,2}:?\d{0,2})-(\d{1,3})', token.strip())
-                if m:
-                    time = parse_time(m.group(1))
-                    amount = int(m.group(2))
-                    if time:
-                        rec = {"date": row.date, "time": time, "amount": amount}
-                        pumped_records.append(rec)
-
-        if pd.notna(row.formula):
-            tokens = str(row.formula).split()
-            for token in tokens:
-                m = re.match(r'(\d{1,2}:?\d{0,2})-(\d{1,3})', token.strip())
-                if m:
-                    time = parse_time(m.group(1))
-                    amount = int(m.group(2))
-                    if time:
-                        rec = {"date": row.date, "time": time, "amount": amount}
-                        formula_records.append(rec)
-
-        if pd.notna(row.urine):
-            tokens = str(row.urine).split()
-            for token in tokens:
-                time, note = parse_diaper_entry(token)
-                if time:
-                    rec = {"date": row.date, "time": time, "note": note}
-                    urine_records.append(rec)
-
-        if pd.notna(row.stool):
-            tokens = str(row.stool).split()
-            for token in tokens:
-                time, note = parse_diaper_entry(token)
-                if time:
-                    rec = {"date": row.date, "time": time, "note": note}
-                    stool_records.append(rec)
-
-        if hasattr(row, "weight") and pd.notna(getattr(row, "weight", None)):
-            weight_records.append({"date": row.date, "weight": row.weight})
-        
-        # 日毎の各お世話の回数の集計
-        print(f"=== {row.date} の集計 ===")
-        breast_count = len([r for r in breast_records if r['date'] == row.date])
-        pumped_count = len([r for r in pumped_records if r['date'] == row.date])
-        formula_count = len([r for r in formula_records if r['date'] == row.date])
-        urine_count = len([r for r in urine_records if r['date'] == row.date])
-        stool_count = len([r for r in stool_records if r['date'] == row.date])
-        count_records.append({"date": row.date, "breast": breast_count, "pumped": pumped_count, "formula": formula_count, "urine": urine_count, "stool": stool_count})
-        print("")
-
-    breast_df = pd.DataFrame(breast_records)
-    pumped_df = pd.DataFrame(pumped_records)
-    formula_df = pd.DataFrame(formula_records)
-    urine_df = pd.DataFrame(urine_records)
-    stool_df = pd.DataFrame(stool_records)
-    count_df = pd.DataFrame(count_records)
-    weight_df = pd.DataFrame(weight_records)
+    # load raw and parse into structured DataFrames
+    raw = load_data(args.file) if args.file and os.path.exists(args.file) else load_data()
+    parsed = parse_records(raw)
+    breast_df = parsed.get('breast', pd.DataFrame())
+    pumped_df = parsed.get('pumped', pd.DataFrame())
+    formula_df = parsed.get('formula', pd.DataFrame())
+    urine_df = parsed.get('urine', pd.DataFrame())
+    stool_df = parsed.get('stool', pd.DataFrame())
+    count_df = parsed.get('count', pd.DataFrame())
+    weight_df = parsed.get('weight', pd.DataFrame())
 
     # DEBUG: 各記録のDataFrameをprint
     print("=== 直接母乳 ===")
