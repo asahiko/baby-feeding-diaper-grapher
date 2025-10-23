@@ -117,9 +117,9 @@ raw = load_raw_df("data/data.xlsx")
 
 # parse_records は辞書形式で各 DataFrame を返します
 dfs = parse_records(raw)
-breast_df = dfs['breast']
-pumped_df = dfs['pumped']
-ormula_df = dfs["formula"]
+breast_df = dfs["breast"]
+pumped_df = dfs["pumped"]
+formula_df = dfs["formula"]
 urine_df = dfs["urine"]
 stool_df = dfs["stool"]
 count_df = dfs["count"]
