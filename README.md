@@ -11,10 +11,12 @@
 
 ## 準備
 
-- Python 3.10以上
-- 必要ライブラリ: pandas, matplotlib, japanize-matplotlib
+- Python 3.10+
+- 必要: pandas
+- matplotlibを使う場合: matplotlib, japanize-matplotlib
+- plotlyを使い場合: plotly, kaleido
 
-## 使い方
+## 主な使い方
 
 ```bash
 python babyplot.py --file data/data.xlsx --output data/graph.png
@@ -88,3 +90,38 @@ python babyplot.py --file data/data.xlsx --output data/graph.png
 ### weight
 
 体重 (kg)
+
+## CLI利用とノートブック利用
+
+このツールは、コマンドラインから実行して図を表示・保存するワークフローと、
+データの読み込み・パース部分をモジュールとしてノートブックから利用するワークフローの両方に対応しています。
+
+### コマンドライン
+
+```bash
+python babyplot.py --file data/data.xlsx --output data/graph.png
+```
+
+上記は `babyplot.py` の CLI を実行し、指定ファイルを読み込んでプロットを表示／保存します。
+
+### Jupyter Notebook / スクリプトからの利用（データパース専用API）
+
+ノートブック等でデータだけを読み込んで加工したい場合は、`babyplot_data` モジュールの関数を使えます。
+例:
+
+```python
+from babyplot_data import load_raw_df, parse_records
+
+# ファイルから読み込み（CSV or Excel）
+raw = load_raw_df("data/data.xlsx")
+
+# parse_records は辞書形式で各 DataFrame を返します
+dfs = parse_records(raw)
+breast_df = dfs['breast']
+pumped_df = dfs['pumped']
+ormula_df = dfs["formula"]
+urine_df = dfs["urine"]
+stool_df = dfs["stool"]
+count_df = dfs["count"]
+weight_df = dfs["weight"]
+```
